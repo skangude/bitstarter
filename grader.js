@@ -24,8 +24,12 @@ References:
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
+var rest = require('restler');
+var util = require('util');
+
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
+var HTMLURL_DEFAULT = "http://whispering-sea-6163.herokuapp.com/";
 
 var assertFileExists = function(infile) {
     var instr = infile.toString();
@@ -35,6 +39,16 @@ var assertFileExists = function(infile) {
     }
     return instr;
 };
+
+var assertUrlExists = function(inurl) {
+    var instr = inurl.toString();
+    //if(!fs.existsSync(instr)) {
+    //    console.log("%s does not exist. Exiting.", instr);
+    //    process.exit(1); // http://nodejs.org/api/process.html#process_process_exit_code
+    //}
+    return instr;
+};
+
 
 var cheerioHtmlFile = function(htmlfile) {
     return cheerio.load(fs.readFileSync(htmlfile));
@@ -55,6 +69,31 @@ var checkHtmlFile = function(htmlfile, checksfile) {
     return out;
 };
 
+var buildfn = function (checksfile) {
+	var procCheckUrl = function(result, response) {
+		if (result instanceof Error) {
+			console.error('Error: ' + util.format(response.message));
+		} else {
+			fs.writeFileSync('tmp_file', result);
+			$ = cheerioHtmlFile('tmp_file');
+			var checks = loadChecks(checksfile).sort();
+			var out = {};
+			for(var ii in checks) {
+				var present = $(checks[ii]).length > 0;
+				out[checks[ii]] = present;
+			}
+			var outJson = JSON.stringify(out, null, 4);
+			console.log(outJson);
+		}
+	};
+	return procCheckUrl;
+};
+
+var checkHtmlUrl = function(htmlurl, checksfile) {
+	procCheckUrl = buildfn(checksfile);
+	rest.get(htmlurl).on('complete', procCheckUrl);
+};
+
 var clone = function(fn) {
     // Workaround for commander.js issue.
     // http://stackoverflow.com/a/6772648
@@ -64,11 +103,14 @@ var clone = function(fn) {
 if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
-        .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+        //.option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+		.option('-u, --url <url_path>', 'Path to default url', clone(assertUrlExists), HTMLURL_DEFAULT)
         .parse(process.argv);
-    var checkJson = checkHtmlFile(program.file, program.checks);
-    var outJson = JSON.stringify(checkJson, null, 4);
-    console.log(outJson);
+    // var checkJson = checkHtmlFile(program.file, program.checks);
+	
+	var checkJson = checkHtmlUrl(program.url, program.checks);
+    //var outJson = JSON.stringify(checkJson, null, 4);
+    //console.log(outJson);
 } else {
     exports.checkHtmlFile = checkHtmlFile;
 }
